@@ -101,3 +101,18 @@ Add these under **Settings → Secrets and variables → Actions**:
 | `CLOUDFLARE_ACCOUNT_ID` | target Cloudflare account id |
 
 The deploy job runs `wrangler deploy --env ai` (the `AI` binding lives in the named `ai` Wrangler environment). There are no placeholder ids to fill in.
+
+### Cloudflare API token permissions
+
+The `CLOUDFLARE_API_TOKEN` repo secret is an **Account**-scoped custom token
+(Cloudflare dashboard → My Profile → API Tokens → Create Custom Token) with
+these permissions:
+
+- **Workers Scripts** — Edit
+- **Workers AI** — Read
+- **Account Settings** — Read
+
+Set **Account Resources → Include → (your account)**. No Zone permissions are
+needed — this repo deploys to a `*.workers.dev` host, not a custom domain. A
+single token can be shared across all `zfb-example-*` repos if it carries the
+union of every repo's permissions.
