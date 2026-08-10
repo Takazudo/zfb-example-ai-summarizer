@@ -86,6 +86,10 @@ pnpm exec wrangler deploy --env ai
 
 ## Continuous deployment (GitHub Actions)
 
+Setting this up from zero? Follow
+[docs/cloudflare-setup.md](docs/cloudflare-setup.md) — the ordered token →
+secrets → first deploy → verify walkthrough.
+
 This repo ships `.github/workflows/deploy.yml`:
 
 - **build** runs on every push and PR — `pnpm install`, `pnpm typecheck`,
