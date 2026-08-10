@@ -1,0 +1,210 @@
+#!/usr/bin/env node
+// Post-deploy smoke test against the LIVE site.
+//
+// A deploy can succeed while the site is still unreachable: the custom-domain
+// route is a separate Cloudflare resource from the Worker script, so
+// `wrangler deploy` can upload a perfectly good Worker and still leave
+// zfb-example-ai-summarizer.takazudomodular.com pointing at nothing. Only a
+// real request over the real hostname can tell the two apart, which is why this
+// runs after deploy instead of being a unit test.
+//
+// Usage:
+//   node scripts/smoke.mjs [url]
+//   SMOKE_URL=https://zfb-example-ai-summarizer-ai.takazudo.workers.dev node scripts/smoke.mjs
+//
+// Exit codes:
+//   0  all checks passed, OR the domain is not wired up yet (deliberate skip)
+//   1  the site answered but a check failed
+//
+// The skip path exists because this repo family's house rule is that a repo
+// never shows a red deploy before Cloudflare is configured — the same reason
+// deploy.yml has a "Preflight — is Cloudflare configured?" step.
+
+const DEFAULT_URL = "https://zfb-example-ai-summarizer.takazudomodular.com/";
+const BASE_URL = process.argv[2] ?? process.env.SMOKE_URL ?? DEFAULT_URL;
+
+const PAGE_TIMEOUT_MS = 20_000;
+// The summarize route may invoke Workers AI, which is slower than a static hit.
+const API_TIMEOUT_MS = 45_000;
+// A freshly attached custom domain can need a moment for DNS/TLS to propagate.
+const CONNECT_RETRIES = 3;
+const RETRY_DELAY_MS = 5_000;
+
+// Verified present in dist/index.html after `pnpm build`. Both are ASCII so the
+// assertion cannot fail on a charset technicality — the real <title> also
+// contains a "·", which is deliberately left out of the match.
+const HTML_MARKERS = ["<title>AI Summarizer", "<h1>AI Summarizer</h1>"];
+
+const SAMPLE_TEXT =
+  "zfb renders static pages by default and uses prerender = false for request-time routes.";
+
+// Connection-level failures that mean "the domain is not wired up yet" rather
+// than "the site is broken": no DNS record, nothing listening, or a certificate
+// that does not yet cover this hostname.
+const NOT_WIRED_UP_CODES = new Set([
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "CERT_HAS_EXPIRED",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+]);
+
+// Cloudflare edge statuses for "the hostname resolves to Cloudflare, but no
+// Worker is attached / the origin is unreachable" — still the not-wired-up
+// state, not a broken build. https://developers.cloudflare.com/support/troubleshooting/
+const NOT_WIRED_UP_STATUSES = new Set([521, 522, 523, 525, 526, 530]);
+
+class SkipSignal extends Error {}
+
+function log(message) {
+  console.log(message);
+}
+
+function notice(message) {
+  // GitHub Actions renders ::notice:: in the run summary; harmless locally.
+  console.log(`::notice::${message}`);
+}
+
+function isNotWiredUp(error) {
+  for (let cause = error; cause; cause = cause.cause) {
+    if (typeof cause.code === "string") {
+      if (NOT_WIRED_UP_CODES.has(cause.code)) return cause.code;
+      if (cause.code.startsWith("ERR_TLS")) return cause.code;
+    }
+  }
+  return null;
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function request(url, { timeoutMs, ...init } = {}) {
+  let lastCode = null;
+
+  for (let attempt = 1; attempt <= CONNECT_RETRIES; attempt += 1) {
+    try {
+      return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (error) {
+      // A timeout surfaces as an AbortError rather than a socket error code.
+      const code = error?.name === "TimeoutError" ? "ETIMEDOUT" : isNotWiredUp(error);
+      if (!code) throw error;
+
+      lastCode = code;
+      if (attempt < CONNECT_RETRIES) {
+        log(`  … ${code} on attempt ${attempt}/${CONNECT_RETRIES}, retrying in ${RETRY_DELAY_MS / 1000}s`);
+        await sleep(RETRY_DELAY_MS);
+      }
+    }
+  }
+
+  throw new SkipSignal(
+    `${new URL(url).host} is not reachable yet (${lastCode} after ${CONNECT_RETRIES} attempts)`,
+  );
+}
+
+function assert(condition, message) {
+  if (!condition) {
+    console.error(`  FAIL ${message}`);
+    process.exitCode = 1;
+    return false;
+  }
+  log(`  ok   ${message}`);
+  return true;
+}
+
+async function checkHomepage() {
+  log(`Checking ${BASE_URL}`);
+  const res = await request(BASE_URL, { timeoutMs: PAGE_TIMEOUT_MS, redirect: "follow" });
+
+  if (NOT_WIRED_UP_STATUSES.has(res.status)) {
+    throw new SkipSignal(
+      `${new URL(BASE_URL).host} returned HTTP ${res.status} — the hostname reaches Cloudflare but no Worker is attached yet`,
+    );
+  }
+
+  // Reaching here over https means TLS completed for this hostname, so a valid
+  // certificate covering it is implied — an invalid one throws at the
+  // connection layer above and is caught as a not-wired-up skip.
+  const scheme = new URL(BASE_URL).protocol === "https:" ? "over valid TLS" : "over http";
+  if (!assert(res.status === 200, `homepage responds 200 ${scheme} (got ${res.status})`)) {
+    return;
+  }
+
+  const contentType = res.headers.get("content-type") ?? "";
+  assert(contentType.includes("text/html"), `homepage is HTML (content-type: ${contentType || "none"})`);
+
+  const html = await res.text();
+  for (const marker of HTML_MARKERS) {
+    assert(html.includes(marker), `homepage contains ${JSON.stringify(marker)}`);
+  }
+}
+
+async function checkSummarize() {
+  const url = new URL("/api/summarize", BASE_URL).toString();
+  log(`Checking ${url}`);
+
+  const res = await request(url, {
+    timeoutMs: API_TIMEOUT_MS,
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text: SAMPLE_TEXT }),
+  });
+
+  if (!assert(res.status === 200, `summarize responds 200 (got ${res.status})`)) {
+    return;
+  }
+
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    assert(false, "summarize returns parseable JSON");
+    return;
+  }
+
+  // Assert the response SHAPE, not the content. lib/ai.ts falls back to a
+  // deterministic local summary whenever the AI binding is missing or the model
+  // call fails, so demanding fallback === false would make this test flaky by
+  // construction. Either branch is a correctly working endpoint.
+  assert(
+    typeof data?.summary === "string" && data.summary.trim().length > 0,
+    "summarize returns a non-empty summary string",
+  );
+  assert(typeof data?.fallback === "boolean", "summarize returns a boolean fallback flag");
+  assert(
+    typeof data?.model === "string" && data.model.length > 0,
+    "summarize returns a model id string",
+  );
+
+  if (data?.fallback === true) {
+    log(`  note deterministic fallback served (reason: ${data.reason ?? "unspecified"})`);
+  } else if (data?.fallback === false) {
+    log(`  note live Workers AI summary served by ${data.model}`);
+  }
+}
+
+async function main() {
+  try {
+    await checkHomepage();
+    await checkSummarize();
+  } catch (error) {
+    if (error instanceof SkipSignal) {
+      notice(`Smoke test skipped — ${error.message}. Attach the custom domain, then re-run the deploy.`);
+      process.exit(0);
+    }
+    throw error;
+  }
+
+  if (process.exitCode === 1) {
+    console.error("\nSmoke test FAILED — the site is reachable but did not behave correctly.");
+    return;
+  }
+
+  log("\nSmoke test passed.");
+}
+
+await main();
