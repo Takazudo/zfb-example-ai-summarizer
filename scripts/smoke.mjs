@@ -61,6 +61,11 @@ const NOT_WIRED_UP_STATUSES = new Set([521, 522, 523, 525, 526, 530]);
 
 class SkipSignal extends Error {}
 
+// Flips true the moment any request comes back from the host. After that the
+// site is demonstrably wired up, so a later connection error is a real fault
+// and must NOT be reclassified as "not deployed yet".
+let siteAnswered = false;
+
 function log(message) {
   console.log(message);
 }
@@ -87,10 +92,14 @@ async function request(url, { timeoutMs, ...init } = {}) {
 
   for (let attempt = 1; attempt <= CONNECT_RETRIES; attempt += 1) {
     try {
-      return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+      siteAnswered = true;
+      return res;
     } catch (error) {
-      // A timeout surfaces as an AbortError rather than a socket error code.
-      const code = error?.name === "TimeoutError" ? "ETIMEDOUT" : isNotWiredUp(error);
+      // Our own AbortSignal.timeout surfaces as a TimeoutError/AbortError
+      // DOMException, not as a socket error code.
+      const aborted = error?.name === "TimeoutError" || error?.name === "AbortError";
+      const code = aborted ? "ETIMEDOUT" : isNotWiredUp(error);
       if (!code) throw error;
 
       lastCode = code;
@@ -101,9 +110,15 @@ async function request(url, { timeoutMs, ...init } = {}) {
     }
   }
 
-  throw new SkipSignal(
-    `${new URL(url).host} is not reachable yet (${lastCode} after ${CONNECT_RETRIES} attempts)`,
-  );
+  const host = new URL(url).host;
+
+  // The host already answered earlier in this run, so it is deployed and this
+  // is a genuine fault — fail rather than skip.
+  if (siteAnswered) {
+    throw new Error(`${host} stopped responding (${lastCode} after ${CONNECT_RETRIES} attempts) at ${url}`);
+  }
+
+  throw new SkipSignal(`${host} is not reachable yet (${lastCode} after ${CONNECT_RETRIES} attempts)`);
 }
 
 function assert(condition, message) {
@@ -154,6 +169,12 @@ async function checkSummarize() {
     body: JSON.stringify({ text: SAMPLE_TEXT }),
   });
 
+  // fetch downgrades POST to GET when it follows a 301/302, which would surface
+  // here as a bare 405 with no hint as to why. Name it instead.
+  if (res.redirected) {
+    log(`  note request was redirected to ${res.url} — a 3xx turns POST into GET`);
+  }
+
   if (!assert(res.status === 200, `summarize responds 200 (got ${res.status})`)) {
     return;
   }
@@ -192,7 +213,9 @@ async function main() {
     await checkHomepage();
     await checkSummarize();
   } catch (error) {
-    if (error instanceof SkipSignal) {
+    // Only skip when nothing has actually failed. Forcing exit 0 on top of a
+    // recorded failure would hide a real regression behind the skip path.
+    if (error instanceof SkipSignal && process.exitCode !== 1) {
       notice(`Smoke test skipped — ${error.message}. Attach the custom domain, then re-run the deploy.`);
       process.exit(0);
     }
