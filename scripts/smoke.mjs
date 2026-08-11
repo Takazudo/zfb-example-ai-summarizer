@@ -47,12 +47,21 @@ const NOT_WIRED_UP_CODES = new Set([
   "ECONNREFUSED",
   "ECONNRESET",
   "ETIMEDOUT",
+  // The host published AAAA records but the client has no IPv6 route. GitHub
+  // runners have no IPv6, so during the propagation window — when Cloudflare
+  // has published AAAA but not yet A — every connect fails this way.
+  "ENETUNREACH",
+  "EHOSTUNREACH",
   "ERR_TLS_CERT_ALTNAME_INVALID",
   "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
   "SELF_SIGNED_CERT_IN_CHAIN",
-  "CERT_HAS_EXPIRED",
   "DEPTH_ZERO_SELF_SIGNED_CERT",
 ]);
+
+// CERT_HAS_EXPIRED is deliberately NOT above. A freshly issued edge certificate
+// is never expired, so an expiry can only mean an already-provisioned domain
+// broke — exactly the outage this check exists to catch. Skipping on it would
+// exit 0 through a real TLS failure.
 
 // Cloudflare edge statuses for "the hostname resolves to Cloudflare, but no
 // Worker is attached / the origin is unreachable" — still the not-wired-up
@@ -80,6 +89,14 @@ function isNotWiredUp(error) {
     if (typeof cause.code === "string") {
       if (NOT_WIRED_UP_CODES.has(cause.code)) return cause.code;
       if (cause.code.startsWith("ERR_TLS")) return cause.code;
+    }
+    // Happy-Eyeballs failures arrive as an AggregateError whose per-address
+    // errors carry the real code; the aggregate itself may not.
+    if (Array.isArray(cause.errors)) {
+      for (const inner of cause.errors) {
+        const code = isNotWiredUp(inner);
+        if (code) return code;
+      }
     }
   }
   return null;
@@ -208,6 +225,20 @@ async function checkSummarize() {
   }
 }
 
+function describeFailure(error) {
+  const seen = [];
+  for (let cause = error; cause; cause = cause.cause) {
+    if (typeof cause.code === "string") seen.push(cause.code);
+    if (Array.isArray(cause.errors)) {
+      for (const inner of cause.errors) {
+        if (typeof inner?.code === "string") seen.push(inner.code);
+      }
+    }
+  }
+  const codes = [...new Set(seen)];
+  return codes.length ? `${codes.join(", ")} (${error?.message ?? error})` : String(error?.message ?? error);
+}
+
 async function main() {
   try {
     await checkHomepage();
@@ -219,7 +250,14 @@ async function main() {
       notice(`Smoke test skipped — ${error.message}. Attach the custom domain, then re-run the deploy.`);
       process.exit(0);
     }
-    throw error;
+
+    // Anything else is a genuine transport/TLS fault on a domain that is not in
+    // a recognised provisioning state — an expired certificate, for instance.
+    // Report it legibly instead of letting an undici stack trace be the whole
+    // CI output, since this is the path a real outage takes.
+    const detail = describeFailure(error);
+    console.error(`\nSmoke test FAILED — ${new URL(BASE_URL).host}: ${detail}`);
+    process.exit(1);
   }
 
   if (process.exitCode === 1) {
