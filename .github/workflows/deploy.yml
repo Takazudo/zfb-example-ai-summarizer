@@ -7,11 +7,19 @@
 #              * secrets.CLOUDFLARE_API_TOKEN is unset, or
 #              * wrangler.toml still holds a REPLACE_WITH_* placeholder id.
 #            So the repo never shows a red deploy before Cloudflare is wired up.
+#   smoke  — after a real deploy: hits the live custom domain and checks the
+#            page and the summarize route. Self-skips (exit 0) while the domain
+#            does not resolve yet, for the same never-red-before-wired reason.
 #
 # Enable deploys by adding, in repo Settings -> Secrets and variables -> Actions:
 #   CLOUDFLARE_API_TOKEN   token with Account · Workers Scripts: Edit
 #                          (+ Workers AI: Read for the `AI` binding, and
 #                          Account Settings: Read). No KV or D1 here.
+#                          ALSO Zone · Workers Routes: Edit on the
+#                          takazudomodular.com zone — wrangler.toml attaches a
+#                          custom domain, and creating that route is a
+#                          zone-scoped operation the account permissions above
+#                          do not cover.
 #   CLOUDFLARE_ACCOUNT_ID  target Cloudflare account id
 name: Deploy
 
@@ -90,3 +98,10 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm exec wrangler deploy --env ai
+      # A green `wrangler deploy` only proves the Worker uploaded. The
+      # custom-domain route is a separate resource, so only a real request over
+      # the real hostname proves the site is actually serving. The script exits
+      # 0 with a ::notice:: while the domain does not resolve yet.
+      - name: Smoke test the live site
+        if: steps.preflight.outputs.ready == 'true'
+        run: node scripts/smoke.mjs

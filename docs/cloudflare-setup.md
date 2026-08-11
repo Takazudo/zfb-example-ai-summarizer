@@ -33,9 +33,15 @@ Otherwise create a custom token in the Cloudflare dashboard under **My Profile
 | Account | Workers Scripts | Edit |
 | Account | Workers AI | Read |
 | Account | Account Settings | Read |
+| Zone | Workers Routes | Edit |
 
-Set **Account Resources → Include → (your account)**. No Zone permissions are
-needed — this repo deploys to a `*.workers.dev` host, not a custom domain.
+Set **Account Resources → Include → (your account)**, and for the Zone row set
+**Zone Resources → Include → takazudomodular.com**.
+
+The Zone row is what lets Cloudflare create the custom-domain route declared in
+`wrangler.toml`. A token with only the three Account rows uploads the Worker
+successfully and then fails on the route step with an authentication error — see
+[Troubleshooting](#troubleshooting).
 
 You also need your **account id**, shown on the Cloudflare dashboard account
 home page (or via `pnpm exec wrangler whoami` once logged in).
@@ -96,18 +102,30 @@ pnpm exec wrangler deploy --env ai
 
 ## 4. Verify the live URL
 
-Wrangler prints the deployed URL at the end of a successful deploy — take it
-from there, since it depends on your account's `workers.dev` subdomain. For the
-`takazudo` subdomain it is:
+The deploy attaches the custom domain declared in `wrangler.toml`, so the
+canonical URL is:
 
 ```
-https://zfb-example-ai-summarizer-ai.takazudo.workers.dev
+https://zfb-example-ai-summarizer.takazudomodular.com
 ```
 
-Load that page for the UI, then check the API route directly:
+`workers_dev = true` also keeps the generated subdomain serving. Wrangler prints
+it at the end of a successful deploy; for the `takazudo` subdomain it is
+`https://zfb-example-ai-summarizer-ai.takazudo.workers.dev`.
+
+The CI deploy runs the committed smoke script against the custom domain
+automatically. Run the same checks yourself against either host:
 
 ```sh
-curl -X POST https://zfb-example-ai-summarizer-ai.takazudo.workers.dev/api/summarize \
+node scripts/smoke.mjs
+node scripts/smoke.mjs https://zfb-example-ai-summarizer-ai.takazudo.workers.dev
+```
+
+It asserts the page loads with this site's markup and that the summarize route
+returns a well-formed response. To look at the raw endpoint:
+
+```sh
+curl -X POST https://zfb-example-ai-summarizer.takazudomodular.com/api/summarize \
   -H "content-type: application/json" \
   -d '{"text":"zfb renders static pages by default and uses prerender = false for request-time routes."}'
 ```
@@ -148,3 +166,13 @@ see what actually exists.
 **Deploy fails with an authentication or permission error.** The token is
 missing **Workers Scripts — Edit**, or **Account Resources → Include** was not
 set to the account that `CLOUDFLARE_ACCOUNT_ID` points at.
+
+**Worker uploads, then the deploy fails while attaching the custom domain.** The
+token is missing the zone-scoped **Workers Routes — Edit** on
+`takazudomodular.com` (step 1). The upload succeeds because that part is
+account-scoped; only the route creation needs the zone. Add the Zone row to the
+token and re-run the deploy — nothing needs to be reverted.
+
+**Smoke test step says "not reachable yet" and passes anyway.** That is the
+deliberate skip path: the custom domain does not resolve, so there is nothing to
+assert yet. It turns into a real check once the route exists.
