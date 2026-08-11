@@ -11,17 +11,28 @@
 // Usage:
 //   node scripts/smoke.mjs [url]
 //   SMOKE_URL=https://zfb-example-ai-summarizer-ai.takazudo.workers.dev node scripts/smoke.mjs
+//   SMOKE_REQUIRE_LIVE=1 node scripts/smoke.mjs   # no skipping, the site must be up
 //
 // Exit codes:
 //   0  all checks passed, OR the domain is not wired up yet (deliberate skip)
-//   1  the site answered but a check failed
+//   1  the site answered but a check failed, or SMOKE_REQUIRE_LIVE is set and
+//      the domain is not serving
 //
 // The skip path exists because this repo family's house rule is that a repo
 // never shows a red deploy before Cloudflare is configured — the same reason
-// deploy.yml has a "Preflight — is Cloudflare configured?" step.
+// deploy.yml has a "Preflight — is Cloudflare configured?" step. It is a
+// one-way ramp: once the domain is actually serving, that grace period is over
+// and SMOKE_REQUIRE_LIVE retires it, so an outage can no longer exit 0 through
+// a path meant for a domain that was never set up.
 
 const DEFAULT_URL = "https://zfb-example-ai-summarizer.takazudomodular.com/";
 const BASE_URL = process.argv[2] ?? process.env.SMOKE_URL ?? DEFAULT_URL;
+
+// Set by deploy.yml, where the custom domain is known to be attached and
+// serving. Every condition that would otherwise skip becomes a hard failure:
+// "not wired up yet" is only a truthful description of a domain nobody has
+// configured, and once one has been, the same symptoms mean an outage.
+const REQUIRE_LIVE = /^(1|true|yes|on)$/i.test((process.env.SMOKE_REQUIRE_LIVE ?? "").trim());
 
 const PAGE_TIMEOUT_MS = 20_000;
 // The summarize route may invoke Workers AI, which is slower than a static hit.
@@ -153,8 +164,10 @@ async function checkHomepage() {
   const res = await request(BASE_URL, { timeoutMs: PAGE_TIMEOUT_MS, redirect: "follow" });
 
   if (NOT_WIRED_UP_STATUSES.has(res.status)) {
+    // A SkipSignal, not a direct exit — under SMOKE_REQUIRE_LIVE main() turns
+    // every one of these into a failure, so both skip paths share one gate.
     throw new SkipSignal(
-      `${new URL(BASE_URL).host} returned HTTP ${res.status} — the hostname reaches Cloudflare but no Worker is attached yet`,
+      `${new URL(BASE_URL).host} returned HTTP ${res.status} — the hostname reaches Cloudflare but no Worker is attached`,
     );
   }
 
@@ -240,6 +253,10 @@ function describeFailure(error) {
 }
 
 async function main() {
+  if (REQUIRE_LIVE) {
+    log("SMOKE_REQUIRE_LIVE is set — an unreachable site fails instead of skipping.");
+  }
+
   try {
     await checkHomepage();
     await checkSummarize();
@@ -247,6 +264,12 @@ async function main() {
     // Only skip when nothing has actually failed. Forcing exit 0 on top of a
     // recorded failure would hide a real regression behind the skip path.
     if (error instanceof SkipSignal && process.exitCode !== 1) {
+      if (REQUIRE_LIVE) {
+        console.error(
+          `\nSmoke test FAILED — ${error.message}. SMOKE_REQUIRE_LIVE is set, so this is an outage on a domain that was already serving, not a deployment waiting to be configured.`,
+        );
+        process.exit(1);
+      }
       notice(`Smoke test skipped — ${error.message}. Attach the custom domain, then re-run the deploy.`);
       process.exit(0);
     }
