@@ -32,9 +32,11 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel stale PR runs, but never a push-to-main run — it may be mid-`wrangler
+# deploy`, and aborting that must not happen.
 concurrency:
   group: deploy-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
