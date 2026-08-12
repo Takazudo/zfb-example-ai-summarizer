@@ -24,7 +24,7 @@
     "concurrently": "^9.2.1",
     "tailwindcss": "^4.2.0",
     "typescript": "^5.9.0",
-    "wrangler": "4.85.0"
+    "wrangler": "4.121.0"
   },
   "packageManager": "pnpm@10.34.1",
   "engines": {
