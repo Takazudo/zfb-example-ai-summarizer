@@ -124,7 +124,7 @@ Add these under **Settings → Secrets and variables → Actions**:
 
 | Secret | Value |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | API token with Account · Workers Scripts: Edit, Workers AI: Read, and Zone · Workers Routes: Edit |
+| `CLOUDFLARE_API_TOKEN` | API token with Account · Workers Scripts: Edit, Workers AI: Read, Account Settings: Read, and Zone · Workers Routes: Edit |
 | `CLOUDFLARE_ACCOUNT_ID` | target Cloudflare account id |
 
 The deploy job runs `wrangler deploy --env ai` (the `AI` binding lives in the named `ai` Wrangler environment). There are no placeholder ids to fill in.
