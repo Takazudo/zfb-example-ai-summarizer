@@ -8,7 +8,7 @@ type ErrorBody = {
   error: string;
 };
 
-// zfb 2.x calls a `prerender = false` route's default export with the page's
+// zfb (2.x and 3.x) calls a `prerender = false` route's default export with the page's
 // props — NOT with the incoming Request. The Request, the Worker `env`, and the
 // ExecutionContext all arrive together on the adapter's per-request
 // AsyncLocalStorage context instead. (Taking the Request as the first parameter

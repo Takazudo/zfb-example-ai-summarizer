@@ -12,17 +12,14 @@
     "dev:cf": "pnpm build && concurrently --names 'wrangler,watch' --kill-others 'wrangler dev --env ai --port 8788' \"chokidar 'pages/**/*.{ts,tsx,md,mdx}' 'components/**/*.{ts,tsx}' 'lib/**/*.ts' 'styles/**/*.css' 'zfb.config.ts' --command 'pnpm build' --initial false --debounce 200\""
   },
   "dependencies": {
-    "@takazudo/zfb": "2.15.0",
-    "@takazudo/zfb-adapter-cloudflare": "2.15.0",
-    "@takazudo/zfb-runtime": "2.15.0",
-    "preact": "^10.29.1",
-    "preact-render-to-string": "^6.6.6"
+    "@takazudo/zfb": "3.0.0",
+    "@takazudo/zfb-adapter-cloudflare": "3.0.0",
+    "@takazudo/zfb-runtime": "3.0.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260828.1",
     "chokidar-cli": "^3.0.0",
     "concurrently": "^9.2.1",
-    "tailwindcss": "^4.2.0",
     "typescript": "^5.9.0",
     "wrangler": "4.127.0"
   },

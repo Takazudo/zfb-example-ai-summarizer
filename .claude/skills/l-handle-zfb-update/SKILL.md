@@ -8,12 +8,12 @@ description: >-
   'bump zfb', 'zfb update', or 'handle zfb update', (2) A new zfb release is out
   and this example should track it.
 user-invocable: true
-argument-hint: "[target-version, e.g. 2.3.0 — omit to use latest stable]"
+argument-hint: "[target-version, e.g. 3.0.1 — omit to use latest stable]"
 ---
 
 # Handle zfb Update — ai-summarizer
 
-This example pairs a Preact island UI with a `pages/api/summarize.tsx` Worker
+This example (on zfb 3.0.0 or newer) pairs a zudo-react island UI with a `pages/api/summarize.tsx` Worker
 route backed by a Cloudflare Workers AI binding, and returns a deterministic
 local fallback when the `AI` binding is absent.
 
@@ -80,15 +80,24 @@ Flag anything that touches a surface this example uses:
 
 | Upstream surface | Where this project uses it |
 | --- | --- |
-| `defineConfig` (`zfb/config` via `zfb-shim.d.ts`) | `zfb.config.ts` — `framework: "preact"`, `adapter: "@takazudo/zfb-adapter-cloudflare"`, `tailwind` |
+| `defineConfig` (`zfb/config` via `zfb-shim.d.ts`) | `zfb.config.ts` — `adapter: "@takazudo/zfb-adapter-cloudflare"`, `wind: { spec: 1, reset: "owned-v1" }` |
 | Cloudflare adapter + `getCloudflareContext()` | emitted `dist/_worker.js`; the `AI` binding read in `pages/api/summarize.tsx` |
 | API route contract (`export const prerender = false`) | `pages/api/summarize.tsx` |
-| Islands runtime (`@takazudo/zfb-runtime`) | `components/summarize-island.tsx` hydration |
-| Tailwind / CSS pipeline | `styles/global.css` |
+| Islands runtime (`@takazudo/zfb-runtime`) + `<Island when="load">` | `components/summarize-island.tsx` hydration, `pages/index.tsx` |
+| zudo-react (`signal`, `computed`, `Show`, `getScope().abortSignal`, `modelValue`, `on:submit`) | `components/summarize-island.tsx` |
+| zudo-wind reset (`owned-v1`) + authored-class scanning | `styles/global.css` (plain authored CSS; one preflight-parity line on `button`) |
+| JSX import source `@takazudo/zfb/zudo-react` | `tsconfig.json` |
 | CLI (`zfb dev/build/preview/check`) | `package.json` scripts, `wrangler.toml` |
 
 Rule: adapt only if this project actually uses the changed feature. Internal zfb
 changes (Rust internals, docs, other frameworks) need no action — note and move on.
+
+### Major-version bumps are migrations
+
+A major bump (2.x → 3.0.0 was one) is not a two-line package edit: it changed the
+JSX runtime, the CSS engine, and the config schema. Read the upstream migration
+guide (`docs/.../guides/migrating-to-v3.mdx` style) and budget for the island port,
+CSS parity, and the full verification in Step 5 including the browser checks.
 
 ## Step 3 — Bump every @takazudo/* package (lockstep)
 
@@ -116,6 +125,27 @@ rm -rf ./dist ./.zfb ./.zfb-build
 pnpm build       # pages build cleanly, adapter writes dist/_worker.js + dist/.assetsignore
 pnpm typecheck   # zfb check passes
 ```
+
+Run `pnpm typecheck` before `pnpm build`: `zfb check` names the file and suggests
+HTML attribute spellings; the build's render errors do not.
+
+For any bump that touches the island runtime, zudo-react, or the wind reset
+(always for a major), also:
+
+- start `pnpm preview --port <free-port> --host 127.0.0.1` (never assume 8787 is
+  free) and run `node scripts/smoke.mjs http://127.0.0.1:<port>/` — expect
+  "Smoke test passed." with the deterministic-fallback note; never point smoke at
+  the live domain by hand;
+- probe `POST /api/summarize` (valid → 200 fallback JSON with
+  `cache-control: no-store`, empty/invalid → 400), `GET /api/summarize` (405 JSON;
+  with `sec-fetch-mode: navigate` the asset layer answers the 404 page), and an
+  unknown path (404 page);
+- in a browser, after `[data-zfb-island="SummarizeIsland"][data-zfb-island-mounted]`,
+  run the submit lifecycle: pending label + disabled button, fallback result with
+  badge and reason, empty-input error, a mocked 500 / network failure, retry, and
+  that the idle `.result:empty::before` placeholder still shows;
+- compare screenshots against the previous version at 375 / 679 / 681 / 1280 px
+  (the stylesheet breakpoint is 680px), serving both builds side by side.
 
 `zfb build` / `zfb dev` do not provide the Workers `AI` binding, so the summarize
 route returns its deterministic fallback locally — that is expected. For a

@@ -1,7 +1,8 @@
 import { defineConfig } from "zfb/config";
 
 export default defineConfig({
-  framework: "preact",
   adapter: "@takazudo/zfb-adapter-cloudflare",
-  tailwind: { enabled: true },
+  // All classes are authored CSS (styles/global.css); no utilities are used.
+  // owned-v1 replaces the Tailwind preflight the 2.x `@import "tailwindcss"` supplied.
+  wind: { spec: 1, reset: "owned-v1" },
 });
