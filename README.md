@@ -1,7 +1,22 @@
 # zfb-example-ai-summarizer
 
-A compact zfb app with a Preact island UI and a `pages/api/summarize.tsx`
+A compact zfb app with a zudo-react island UI and a `pages/api/summarize.tsx`
 Worker route backed by a Cloudflare Workers AI binding.
+
+## How it is built (zfb 3)
+
+- **UI:** `components/summarize-island.tsx` is a zudo-react island
+  (`@takazudo/zfb/zudo-react`). Its setup runs once; state lives in `signal`s,
+  derived text in `computed`s, and the result/error areas are `<Show>` branches.
+  The textarea is bound with `modelValue`, and the form uses the native
+  `on:submit` listener. Each submission carries a generation number and the
+  island's `getScope().abortSignal`, so a stale or post-disposal response never
+  overwrites newer state.
+- **Styles:** `styles/global.css` is plain authored CSS. `zfb.config.ts` sets
+  `wind: { spec: 1, reset: "owned-v1" }` for the base reset only; no utility
+  classes are used.
+- **JSX:** HTML attribute spellings (`class`, `charset`, `maxlength`), compiled
+  with `jsxImportSource: "@takazudo/zfb/zudo-react"`.
 
 ## Local Development
 
@@ -39,10 +54,11 @@ to `wrangler dev` after the build. That is a real Worker runtime, so the API
 route works here. The default Wrangler environment deliberately has no AI
 binding, so preview needs no Cloudflare login and the endpoint returns the
 deterministic fallback response — this is the primary zero-account local check.
-Point the smoke script at whichever port wrangler prints:
+Point the smoke script at whichever port wrangler prints (or pick one with
+`pnpm preview --port <port> --host 127.0.0.1`):
 
 ```sh
-node scripts/smoke.mjs http://localhost:8787/
+node scripts/smoke.mjs http://127.0.0.1:<port>/
 ```
 
 ## Cloudflare Workers AI

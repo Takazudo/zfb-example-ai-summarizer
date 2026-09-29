@@ -1,5 +1,3 @@
-@import "tailwindcss";
-
 :root {
   color-scheme: light;
   font-family:
@@ -110,6 +108,8 @@ textarea:focus {
 }
 
 button {
+  /* Tailwind preflight parity: the owned-v1 reset leaves buttons at appearance: auto. */
+  appearance: button;
   min-width: 9.5rem;
   min-height: 2.6rem;
   border: 1px solid #0f5d4f;
