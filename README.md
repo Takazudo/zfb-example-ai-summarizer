@@ -63,7 +63,7 @@ node scripts/smoke.mjs http://127.0.0.1:<port>/
 
 ## Local verification without model usage
 
-The SDK, runtime and Cloudflare adapter are pinned to **4.3.0**. The default
+The SDK, runtime and Cloudflare adapter are pinned to **4.4.0**. The default
 esbuild backend is unchanged. To check the built app without Cloudflare credentials:
 
 ```sh
@@ -90,7 +90,10 @@ chunked JSON consumption, stale responses, disposal and no-JavaScript rendering.
 For a version comparison, preserve the old `dist` outside this checkout, then run
 `BASELINE_DIST=/absolute/path/to/old-dist TEST_ARTIFACTS=/tmp/ai-summarizer-check pnpm test:browser`.
 This asserts exact screenshot and computed-style/geometry parity. Keep generated
-screenshots outside git. See [the 4.3.0 verification record](docs/zfb-4.3.0-verification.md).
+screenshots outside git. Captures must settle to two consecutive identical images before
+comparison; no pixel tolerance is applied. If browser downloads are unavailable,
+set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to an installed Chromium executable.
+See [the 4.4.0 verification record](docs/zfb-4.4.0-verification.md).
 
 ## Cloudflare Workers AI
 

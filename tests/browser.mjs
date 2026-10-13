@@ -7,7 +7,9 @@ import { startWorker } from "./local-worker.mjs";
 
 const artifacts = process.env.TEST_ARTIFACTS;
 if (artifacts) await mkdir(artifacts, { recursive: true });
-const browser = await chromium.launch();
+const browser = await chromium.launch({
+  executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+});
 const results = {};
 async function exercise(label, dist) {
   const server = await startWorker({ dist });
@@ -31,7 +33,15 @@ async function exercise(label, dist) {
         style: Object.fromEntries(Array.from(getComputedStyle(el)).map(key =>
           [key, getComputedStyle(el).getPropertyValue(key)])),
       })));
-    const png = await page.screenshot({ fullPage: true, animations: "disabled" });
+    let png = await page.screenshot({ fullPage: true, animations: "disabled" });
+    let stable = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const next = await page.screenshot({ fullPage: true, animations: "disabled" });
+      stable = png.equals(next);
+      png = next;
+      if (stable) break;
+    }
+    assert.ok(stable, `${label}-${name}: screenshot must settle before comparison`);
     results[label][name] = { sha256: createHash("sha256").update(png).digest("hex"), metrics };
     if (artifacts) await writeFile(resolve(artifacts, `${label}-${name}.png`), png);
   }
@@ -142,9 +152,12 @@ async function exercise(label, dist) {
 try {
   if (process.env.BASELINE_DIST) await exercise("baseline", resolve(process.env.BASELINE_DIST));
   await exercise("target", resolve("dist"));
-  if (results.baseline) {
-    assert.deepEqual(results.target, results.baseline, "Screenshots must match the 3.1.0 baseline");
-    console.log("PASS: all 26 screenshots byte-identical to 3.1.0.");
-  }
   if (artifacts) await writeFile(resolve(artifacts, "screenshots.json"), JSON.stringify(results, null, 2));
+  if (results.baseline) {
+    for (const name of Object.keys(results.baseline)) {
+      assert.deepEqual(results.target[name].metrics, results.baseline[name].metrics, `${name}: styles and geometry must match`);
+      assert.equal(results.target[name].sha256, results.baseline[name].sha256, `${name}: screenshot must match`);
+    }
+    console.log("PASS: all 26 screenshots byte-identical to the supplied baseline.");
+  }
 } finally { await browser.close(); }
