@@ -152,6 +152,13 @@ route returns its deterministic fallback locally — that is expected. For a
 binding-realistic check, run `pnpm dev:cf` (or `pnpm exec wrangler dev --env ai`)
 after building, per the README.
 
+For verification without model usage, prefer `pnpm test:runtime` and
+`pnpm test:browser` after building. These exercise the emitted Worker in local
+workerd with a test-only `AI.run()` substitute. `dev:cf` uses real Workers AI and
+requires separate authorization for model usage. Preserve an old build outside
+the checkout and set `BASELINE_DIST` for exact browser screenshot/style parity.
+The 4.3.0 run is recorded in `docs/zfb-4.3.0-verification.md`.
+
 ## Step 6 — Report
 
 Summarize: versions traversed, notable upstream changes per release (one line

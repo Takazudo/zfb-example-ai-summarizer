@@ -61,6 +61,40 @@ Point the smoke script at whichever port wrangler prints (or pick one with
 node scripts/smoke.mjs http://127.0.0.1:<port>/
 ```
 
+## Local verification without model usage
+
+The SDK, runtime and Cloudflare adapter are pinned to **4.4.0**. The default
+esbuild backend is unchanged. To check the built app without Cloudflare credentials:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm build
+pnpm test:runtime
+pnpm exec playwright install chromium
+pnpm test:browser
+```
+
+The tests start local workerd instances on ephemeral ports with temporary configs
+containing no real AI binding, routes or secrets. A test-only wrapper supplies
+`AI.run()` responses to the emitted Worker. Both commands stop their servers and
+remove temporary configs when finished. CI runs these checks in its build job;
+the deployment job still only runs on pushes to `main`.
+
+Runtime coverage includes request validation, response formats, missing/failed AI,
+empty or unexpected streaming output, normalization and the 6000-character limit.
+The endpoint intentionally returns buffered JSON; it does not consume AI streams.
+Browser coverage includes five viewport widths, loading/fallback/error/retry,
+chunked JSON consumption, stale responses, disposal and no-JavaScript rendering.
+
+For a version comparison, preserve the old `dist` outside this checkout, then run
+`BASELINE_DIST=/absolute/path/to/old-dist TEST_ARTIFACTS=/tmp/ai-summarizer-check pnpm test:browser`.
+This asserts exact screenshot and computed-style/geometry parity. Keep generated
+screenshots outside git. Captures must settle to two consecutive identical images before
+comparison; no pixel tolerance is applied. If browser downloads are unavailable,
+set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to an installed Chromium executable.
+See [the 4.4.0 verification record](docs/zfb-4.4.0-verification.md).
+
 ## Cloudflare Workers AI
 
 Workers AI does not need placeholder IDs in `wrangler.toml`. The real binding

@@ -62,6 +62,12 @@ jobs:
         run: pnpm typecheck
       - name: Build
         run: pnpm build
+      - name: Mock AI runtime contracts
+        run: pnpm test:runtime
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Mock AI browser contracts
+        run: pnpm test:browser
 
   deploy:
     name: Deploy to Cloudflare Workers

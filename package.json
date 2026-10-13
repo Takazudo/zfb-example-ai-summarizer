@@ -9,17 +9,20 @@
     "build": "zfb build",
     "preview": "zfb preview",
     "typecheck": "zfb check",
-    "dev:cf": "pnpm build && concurrently --names 'wrangler,watch' --kill-others 'wrangler dev --env ai --port 8788' \"chokidar 'pages/**/*.{ts,tsx,md,mdx}' 'components/**/*.{ts,tsx}' 'lib/**/*.ts' 'styles/**/*.css' 'zfb.config.ts' --command 'pnpm build' --initial false --debounce 200\""
+    "dev:cf": "pnpm build && concurrently --names 'wrangler,watch' --kill-others 'wrangler dev --env ai --port 8788' \"chokidar 'pages/**/*.{ts,tsx,md,mdx}' 'components/**/*.{ts,tsx}' 'lib/**/*.ts' 'styles/**/*.css' 'zfb.config.ts' --command 'pnpm build' --initial false --debounce 200\"",
+    "test:runtime": "node tests/runtime.mjs",
+    "test:browser": "node tests/browser.mjs"
   },
   "dependencies": {
-    "@takazudo/zfb": "3.1.0",
-    "@takazudo/zfb-adapter-cloudflare": "3.1.0",
-    "@takazudo/zfb-runtime": "3.1.0"
+    "@takazudo/zfb": "4.4.0",
+    "@takazudo/zfb-adapter-cloudflare": "4.4.0",
+    "@takazudo/zfb-runtime": "4.4.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260828.1",
     "chokidar-cli": "^3.0.0",
     "concurrently": "^9.2.1",
+    "playwright": "1.61.1",
     "typescript": "^5.9.0",
     "wrangler": "4.127.0"
   },
