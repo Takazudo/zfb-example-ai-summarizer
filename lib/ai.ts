@@ -1,4 +1,4 @@
-const MODEL = "@cf/meta/llama-3.2-1b-instruct";
+const MODEL = "@cf/google/gemma-4-26b-a4b-it";
 const MAX_INPUT_CHARS = 6000;
 const MAX_OUTPUT_TOKENS = 220;
 
@@ -37,7 +37,8 @@ export async function summarizeText(text: string, env: AiEnv): Promise<SummaryRe
         },
       ],
       temperature: 0,
-      max_tokens: MAX_OUTPUT_TOKENS,
+      max_completion_tokens: MAX_OUTPUT_TOKENS,
+      chat_template_kwargs: { enable_thinking: false },
     });
 
     const summary = parseAiText(output);
@@ -91,7 +92,7 @@ function cleanSummary(value: string): string {
 }
 
 function looksUsable(summary: string): boolean {
-  return /[A-Za-z0-9]/.test(summary) && summary.length >= 12;
+  return /[\p{L}\p{N}]/u.test(summary) && summary.length >= 12;
 }
 
 function fallbackSummary(text: string, reason: string): SummaryResult {

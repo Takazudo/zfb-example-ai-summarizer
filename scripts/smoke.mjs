@@ -12,6 +12,7 @@
 //   node scripts/smoke.mjs [url]
 //   SMOKE_URL=https://zfb-example-ai-summarizer-ai.takazudo.workers.dev node scripts/smoke.mjs
 //   SMOKE_REQUIRE_LIVE=1 node scripts/smoke.mjs   # no skipping, the site must be up
+//   SMOKE_REQUIRE_AI=1 node scripts/smoke.mjs     # require a real Gemma summary
 //
 // Exit codes:
 //   0  all checks passed, OR the domain is not wired up yet (deliberate skip)
@@ -26,6 +27,7 @@
 // a path meant for a domain that was never set up.
 
 const DEFAULT_URL = "https://zfb-example-ai-summarizer.takazudomodular.com/";
+const EXPECTED_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 const BASE_URL = process.argv[2] ?? process.env.SMOKE_URL ?? DEFAULT_URL;
 
 // Set by deploy.yml, where the custom domain is known to be attached and
@@ -33,6 +35,8 @@ const BASE_URL = process.argv[2] ?? process.env.SMOKE_URL ?? DEFAULT_URL;
 // "not wired up yet" is only a truthful description of a domain nobody has
 // configured, and once one has been, the same symptoms mean an outage.
 const REQUIRE_LIVE = /^(1|true|yes|on)$/i.test((process.env.SMOKE_REQUIRE_LIVE ?? "").trim());
+
+const REQUIRE_AI = process.env.SMOKE_REQUIRE_AI === "1";
 
 const PAGE_TIMEOUT_MS = 20_000;
 // The summarize route may invoke Workers AI, which is slower than a static hit.
@@ -217,10 +221,6 @@ async function checkSummarize() {
     return;
   }
 
-  // Assert the response SHAPE, not the content. lib/ai.ts falls back to a
-  // deterministic local summary whenever the AI binding is missing or the model
-  // call fails, so demanding fallback === false would make this test flaky by
-  // construction. Either branch is a correctly working endpoint.
   assert(
     typeof data?.summary === "string" && data.summary.trim().length > 0,
     "summarize returns a non-empty summary string",
@@ -230,6 +230,11 @@ async function checkSummarize() {
     typeof data?.model === "string" && data.model.length > 0,
     "summarize returns a model id string",
   );
+
+  if (REQUIRE_AI) {
+    assert(data?.fallback === false, "summarize serves a Workers AI summary without fallback");
+    assert(data?.model === EXPECTED_MODEL, `summarize uses ${EXPECTED_MODEL} (got ${data?.model ?? "none"})`);
+  }
 
   if (data?.fallback === true) {
     log(`  note deterministic fallback served (reason: ${data.reason ?? "unspecified"})`);

@@ -22,10 +22,10 @@ Worker route backed by a Cloudflare Workers AI binding.
 
 Requires Node.js 24 or newer. `@takazudo/zfb` 5.0.0 raised `engines.node` from `>=22` to `>=24`, and 7.2.0 keeps that floor.
 
-Install dependencies:
+Install dependencies with the pnpm version pinned in `package.json`:
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 ```
 
 Fast UI loop:
@@ -65,7 +65,9 @@ node scripts/smoke.mjs http://127.0.0.1:<port>/
 
 ## Cloudflare Workers AI
 
-Workers AI does not need placeholder IDs in `wrangler.toml`. The real binding
+The summarizer uses [Google Gemma 4 26B A4B IT](https://developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/)
+(`@cf/google/gemma-4-26b-a4b-it`). Workers AI does not need placeholder IDs in
+`wrangler.toml`. The real binding
 lives in the named `ai` Wrangler environment:
 
 ```toml
@@ -149,22 +151,20 @@ The deploy job runs `wrangler deploy --env ai` (the `AI` binding lives in the na
 
 ### Post-deploy smoke test
 
-After a real deploy, CI runs `scripts/smoke.mjs` against the live custom domain.
-It checks that the homepage answers 200 over valid TLS with this site's markup,
-and that `POST /api/summarize` returns a well-formed response — accepting either
-a live Workers AI summary or the deterministic fallback, since demanding live AI
-output would make the check flaky by construction.
+After deployment, CI runs `scripts/smoke.mjs` against the live custom domain.
+It checks the homepage over TLS and the JSON from `POST /api/summarize`.
+`SMOKE_REQUIRE_LIVE=1` makes an unreachable site fail, and
+`SMOKE_REQUIRE_AI=1` requires a nonempty summary with `"fallback": false`
+and `"model": "@cf/google/gemma-4-26b-a4b-it"`.
 
-Run it by hand against any deployment:
+Run the production checks by hand:
 
 ```sh
-node scripts/smoke.mjs                                                   # the custom domain
-node scripts/smoke.mjs https://zfb-example-ai-summarizer-ai.takazudo.workers.dev
+SMOKE_REQUIRE_LIVE=1 SMOKE_REQUIRE_AI=1 node scripts/smoke.mjs
 ```
 
-While the custom domain does not resolve yet, the script exits 0 with a
-`::notice::` rather than failing — the same never-red-before-Cloudflare-is-wired
-rule the deploy job's preflight step follows.
+The default smoke command accepts deterministic fallback for local Worker
+previews. Without `SMOKE_REQUIRE_LIVE=1`, it can skip an unconfigured domain.
 
 ### Cloudflare API token permissions
 

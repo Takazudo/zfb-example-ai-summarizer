@@ -13,6 +13,7 @@
 #            never-red-before-wired reason — but this repo's domain IS attached
 #            and serving, so the step sets SMOKE_REQUIRE_LIVE=1 and an
 #            unreachable site fails the run instead of passing quietly.
+#            SMOKE_REQUIRE_AI=1 also requires a real summary from the configured model.
 #
 # Enable deploys by adding, in repo Settings -> Secrets and variables -> Actions:
 #   CLOUDFLARE_API_TOKEN   token with Account · Workers Scripts: Edit
@@ -114,4 +115,5 @@ jobs:
           # anything that can truthfully happen here. Requiring live turns those
           # conditions back into the failures they now are.
           SMOKE_REQUIRE_LIVE: "1"
+          SMOKE_REQUIRE_AI: "1"
         run: node scripts/smoke.mjs
