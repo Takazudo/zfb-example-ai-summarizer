@@ -1,9 +1,8 @@
 # Cloudflare setup
 
-An ordered walkthrough from zero to a deployed Worker. **This repo is not
-deployed yet** — it has no Cloudflare secrets set, and the `deploy` job in
-`.github/workflows/deploy.yml` self-skips until they exist. Nothing below
-assumes a previous deploy.
+The demo is deployed at
+[the production custom domain](https://zfb-example-ai-summarizer.takazudomodular.com).
+Use this walkthrough when configuring a fresh deployment.
 
 The README's [Cloudflare Workers AI](../README.md#cloudflare-workers-ai) and
 [Continuous deployment](../README.md#continuous-deployment-github-actions)
@@ -113,16 +112,19 @@ https://zfb-example-ai-summarizer.takazudomodular.com
 it at the end of a successful deploy; for the `takazudo` subdomain it is
 `https://zfb-example-ai-summarizer-ai.takazudo.workers.dev`.
 
-The CI deploy runs the committed smoke script against the custom domain
-automatically. Run the same checks yourself against either host:
+The CI deploy checks the custom domain with both smoke flags enabled.
+`SMOKE_REQUIRE_LIVE=1` requires the site to be reachable.
+`SMOKE_REQUIRE_AI=1` requires a nonempty Gemma summary with `"fallback": false`.
+Run the same checks against either production host:
 
 ```sh
-node scripts/smoke.mjs
-node scripts/smoke.mjs https://zfb-example-ai-summarizer-ai.takazudo.workers.dev
+SMOKE_REQUIRE_LIVE=1 SMOKE_REQUIRE_AI=1 node scripts/smoke.mjs
+SMOKE_REQUIRE_LIVE=1 SMOKE_REQUIRE_AI=1 node scripts/smoke.mjs https://zfb-example-ai-summarizer-ai.takazudo.workers.dev
 ```
 
-It asserts the page loads with this site's markup and that the summarize route
-returns a well-formed response. To look at the raw endpoint:
+For account-free local Worker preview, run `node scripts/smoke.mjs` with the
+preview URL and omit `SMOKE_REQUIRE_AI` so the deterministic fallback can pass.
+To inspect the production response directly:
 
 ```sh
 curl -X POST https://zfb-example-ai-summarizer.takazudomodular.com/api/summarize \
@@ -133,7 +135,7 @@ curl -X POST https://zfb-example-ai-summarizer.takazudomodular.com/api/summarize
 A working Workers AI binding returns `"fallback": false` and the model id:
 
 ```json
-{ "summary": "…", "fallback": false, "model": "@cf/meta/llama-3.2-1b-instruct" }
+{ "summary": "…", "fallback": false, "model": "@cf/google/gemma-4-26b-a4b-it" }
 ```
 
 If the response instead contains `"fallback": true` and a `reason`, the route
@@ -173,6 +175,6 @@ token is missing the zone-scoped **Workers Routes — Edit** on
 account-scoped; only the route creation needs the zone. Add the Zone row to the
 token and re-run the deploy — nothing needs to be reverted.
 
-**Smoke test step says "not reachable yet" and passes anyway.** That is the
-deliberate skip path: the custom domain does not resolve, so there is nothing to
-assert yet. It turns into a real check once the route exists.
+**Smoke test reports a fallback.** A fallback passes ordinary local smoke.
+Production smoke fails and prints the fallback reason so you can diagnose the
+binding, model call, or empty model output.
