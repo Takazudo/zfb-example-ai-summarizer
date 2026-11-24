@@ -3,7 +3,7 @@
 A compact zfb app with a zudo-react island UI and a `pages/api/summarize.tsx`
 Worker route backed by a Cloudflare Workers AI binding.
 
-## How it is built (zfb 6)
+## How it is built (zfb 7)
 
 - **UI:** `components/summarize-island.tsx` is a zudo-react island
   (`@takazudo/zfb/zudo-react`). Its setup runs once; state lives in `signal`s,
@@ -20,7 +20,7 @@ Worker route backed by a Cloudflare Workers AI binding.
 
 ## Local Development
 
-Requires Node.js 24 or newer. `@takazudo/zfb` 5.0.0 raised `engines.node` from `>=22` to `>=24`, and 6.0.1 keeps that floor.
+Requires Node.js 24 or newer. `@takazudo/zfb` 5.0.0 raised `engines.node` from `>=22` to `>=24`, and 7.2.0 keeps that floor.
 
 Install dependencies:
 
